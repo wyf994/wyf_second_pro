@@ -1,0 +1,103 @@
+// velocity_solution.cpp : 定义控制台应用程序的入口点。
+//
+
+#include "stdafx.h"
+#include <opencv2/opencv.hpp>
+#include <opencv2/imgproc.hpp>
+#include <opencv2/highgui.hpp>
+#include <vector>
+#include <math.h>
+#include<fstream>
+
+
+int main(int argc, char* argv[])
+{   
+	cv::Mat Ix;
+	cv::Mat Iy;
+	cv::Mat It;
+    cv::Mat sum_Ix2;
+	cv::Mat sum_Iy2;
+	cv::Mat sum_IxIy;
+    cv::Mat sum_IxIt;
+	cv::Mat sum_IyIt;
+	cv::Mat prev_frame;
+	cv::Mat frame;
+    cv::VideoCapture capture;
+	capture.open("G:\\sunpointimage\\Rec 0016.avi");
+
+	int i=1;//记录帧数
+	std::cout<<i<<std::endl;
+	i++;
+	while(true)
+	{capture.read(frame);
+	frame.convertTo(frame,CV_64FC1,1,0);//三通道转化为单通道
+		   double frame_point=frame.at<double>(30,30);
+	  std::cout<<"frame_point"<<frame_point<<std::endl;
+	if(prev_frame.empty())
+	{
+	frame.copyTo(prev_frame);
+	}
+	
+    //I1=cv::imread();
+	//cvtColor(I1,I1grey,CV_BGR2GRAY);
+	//I2=cv::imread();
+	//std::vector<cv::Point2f> points[2];
+	//std::vector<cv::Point2f> features;
+    //goodFeaturesToTrack(I1grey,features,500,0.01,10);
+	//points[0].insert(points[0].end(),features.begin(),features.end());
+/*------------------------------计算x梯度--------------------------*/
+	 cv::Mat kernal_x =cv::Mat::zeros(3,3,CV_64FC1);
+	 kernal_x.at<double>(1,0)=-1.0;//cv::Mat mask=(cv::Mat_<double>(4,4)
+	 kernal_x.at<double>(1,2)=1.0;
+	 filter2D(prev_frame,Ix,-1,kernal_x);
+	
+/*------------------------------计算y梯度-------------------------*/
+	cv::Mat kernal_y=cv::Mat::zeros(3,3,CV_64FC1);
+		kernal_y.at<double>(0,1)=-1.0;
+		kernal_y.at<double>(2,1)=1.0;
+	filter2D(prev_frame,Iy,-1,kernal_y);
+	
+	cv::Mat kernal_sum=cv::Mat::ones(3,3,CV_64FC1);
+	//filter2D函数的意义在于卷积
+	
+/*------------------------计算两帧灰度变化--------------------------------*/
+     It=frame-prev_frame;
+	 double It_point=It.at<double>(30,30);
+	 std::cout<<"It_point"<<It_point<<std::endl;
+/*--------------------------计算邻域内的和-----------------------*/
+      cv::Mat Ix2=Ix.mul(Ix);
+        cv::Mat Iy2=Iy.mul(Iy);
+	   cv::Mat IxIy=Ix.mul(Iy);
+	   cv::Mat IxIt=Ix.mul(It);
+	   cv::Mat IyIt=Iy.mul(It);
+	   filter2D(Ix2,sum_Ix2,-1,kernal_sum);
+	    filter2D(Iy2,sum_Iy2,-1,kernal_sum);
+	  filter2D(IxIy,sum_IxIy,-1,kernal_sum);
+      filter2D(IxIt,sum_IxIt,-1,kernal_sum);
+	   filter2D(IyIt,sum_IyIt,-1,kernal_sum);
+	  cv::Mat det=sum_Ix2.mul(sum_Iy2)-(sum_IxIy).mul(sum_IxIy);
+/*----------------------------求解像素点的速度-------------------------*/
+      cv::Mat u=cv::Mat::zeros(frame.rows,frame.cols,CV_64FC1);
+	  cv::Mat v=cv::Mat::zeros(frame.rows,frame.cols,CV_64FC1);
+	  u=sum_IyIt.mul(sum_IxIy)-sum_IxIt.mul(sum_Iy2);
+	  divide(u,det,u);
+	  double pix1=u.at<double>(30,30);
+	  std::cout<<"u"<<pix1<<std::endl;
+	  v=sum_IxIy.mul(sum_IyIt)-sum_Iy2.mul(sum_IxIt);
+	    divide(v,det,v);
+		//cv::FileStorage fs("./mat.xml",cv::FileStorage::WRITE);将文件写入xml里
+      // fs<<"mat"<<u;
+       // fs.release();
+	  double prev_frame_point=prev_frame.at<double>(30,30);
+	  std::cout<<"prev_frame_point"<<prev_frame_point<<std::endl;
+	  frame.copyTo(prev_frame);
+	  
+
+	  imshow("img",frame);
+	  if(cv::waitKey(10)>=0)
+	  {
+	  return -1;}
+	  cv::waitKey(1);
+	}
+	  return 0;
+	}
