@@ -8,7 +8,7 @@
 #include <vector>
 #include <math.h>
 #include<fstream>
-
+#include<string>
 
 int main(int argc, char* argv[])
 {   
@@ -22,29 +22,64 @@ int main(int argc, char* argv[])
 	cv::Mat sum_IyIt;
 	cv::Mat prev_frame;
 	cv::Mat frame;
+	cv::Mat frame_grey;
+	cv::Mat prev_frame_grey;
+	cv::Mat frame_double;
     cv::VideoCapture capture;
-	capture.open("G:\\sunpointimage\\Rec 0016.avi");
+	std::vector<cv::Point2f> features;
+	std::vector<cv::Point2f> points[2];
+	std::vector<uchar>status;
+	std::vector<float>err;
+    char buf_img[32];
+	char buf_point[32];
+	std::string s_img;
+	std::string s_point;
+	capture.open("G:\\videorecord\\Rec 0012.avi");
 
 	int i=1;//记录帧数
-	std::cout<<i<<std::endl;
-	i++;
+	
 	while(true)
 	{capture.read(frame);
-	frame.convertTo(frame,CV_64FC1,1,0);//三通道转化为单通道
-		   double frame_point=frame.at<double>(30,30);
-	  std::cout<<"frame_point"<<frame_point<<std::endl;
-	if(prev_frame.empty())
-	{
-	frame.copyTo(prev_frame);
-	}
+	cvtColor(frame,frame_grey,CV_BGR2GRAY);
+	frame.convertTo(frame_double,CV_64F,1,0);//类型转化，转化为double类型,三通道,得到double类型的结果
+	std::cout<<"第"<<i<<"帧"<<std::endl;
+	i++;
 	
-    //I1=cv::imread();
-	//cvtColor(I1,I1grey,CV_BGR2GRAY);
-	//I2=cv::imread();
-	//std::vector<cv::Point2f> points[2];
-	//std::vector<cv::Point2f> features;
-    //goodFeaturesToTrack(I1grey,features,500,0.01,10);
-	//points[0].insert(points[0].end(),features.begin(),features.end());
+	if(prev_frame_grey.empty())
+	{
+	frame_grey.copyTo(prev_frame_grey);}
+
+/*-----------------------------特征点的跟踪-----------------------*/
+	goodFeaturesToTrack(prev_frame_grey,features,500,0.01,10);
+	
+	if(points[0].size()<=100)
+	{points[0].insert(points[0].end(),features.begin(),features.end());}
+
+	calcOpticalFlowPyrLK(prev_frame_grey,frame_grey,points[0],points[1],status,err);
+	int k=0;
+    for(int i=0;i<points[1].size();i++)
+	{
+		if(status[i]&&(abs(points[0][i].x-points[1][i].x))+(abs(points[0][i].y-points[1][i].y))>1)
+		{
+			points[0][k]=points[0][i];
+			points[1][k++]=points[1][i];	
+		}
+	
+	}
+	points[0].resize(k);
+	points[1].resize(k);
+	/*if(k>=10)
+	{std::cout<<"coo"<<points[0][2].x<<points[0][2].y<<std::endl;}*/
+
+	frame_grey.copyTo(prev_frame_grey);
+
+	/*	double frame_point=frame_double.at<double>(30,30);
+	  std::cout<<"frame_point"<<frame_point<<std::endl;*/
+	  if(prev_frame.empty())
+	{
+	frame_double.copyTo(prev_frame);
+	}
+
 /*------------------------------计算x梯度--------------------------*/
 	 cv::Mat kernal_x =cv::Mat::zeros(3,3,CV_64FC1);
 	 kernal_x.at<double>(1,0)=-1.0;//cv::Mat mask=(cv::Mat_<double>(4,4)
@@ -61,9 +96,9 @@ int main(int argc, char* argv[])
 	//filter2D函数的意义在于卷积
 	
 /*------------------------计算两帧灰度变化--------------------------------*/
-     It=frame-prev_frame;
-	 double It_point=It.at<double>(30,30);
-	 std::cout<<"It_point"<<It_point<<std::endl;
+     It=frame_double-prev_frame;
+	/* double It_point=It.at<double>(30,30);
+	 std::cout<<"It_point"<<It_point<<std::endl;*/
 /*--------------------------计算邻域内的和-----------------------*/
       cv::Mat Ix2=Ix.mul(Ix);
         cv::Mat Iy2=Iy.mul(Iy);
@@ -81,23 +116,49 @@ int main(int argc, char* argv[])
 	  cv::Mat v=cv::Mat::zeros(frame.rows,frame.cols,CV_64FC1);
 	  u=sum_IyIt.mul(sum_IxIy)-sum_IxIt.mul(sum_Iy2);
 	  divide(u,det,u);
-	  double pix1=u.at<double>(30,30);
-	  std::cout<<"u"<<pix1<<std::endl;
+	/* double u_point=u.at<double>(30,30);
+	  std::cout<<"u"<<u_point<<std::endl; *///由于数据量过大，选择其中的一个点输出
 	  v=sum_IxIy.mul(sum_IyIt)-sum_Iy2.mul(sum_IxIt);
 	    divide(v,det,v);
+/*--------------------------输出特征点u，v--------------------------------------*/
+		for(int i=0;i<points[0].size();i++)
+		{  
+			if(points[0][i].x<462&&points[0][i].y<628)
+			{std::cout<<"x"<<points[0][i].x<<"y"<<points[0][i].y<<std::endl;
+		std::cout<<i<<".point"<<""<<(u.at<double>((double)points[0][i].x,(double)points[0][i].y))<<std::endl;
+		std::cout<<i<<".point"<<""<<(v.at<double>((double)points[0][i].x,(double)points[0][i].y))<<std::endl;}//精度损失,double和int类型，  error,doublel类型输出整值，应该没有问题
+		
+		}
+
 		//cv::FileStorage fs("./mat.xml",cv::FileStorage::WRITE);将文件写入xml里
       // fs<<"mat"<<u;
        // fs.release();
-	  double prev_frame_point=prev_frame.at<double>(30,30);
-	  std::cout<<"prev_frame_point"<<prev_frame_point<<std::endl;
-	  frame.copyTo(prev_frame);
-	  
 
-	  imshow("img",frame);
+	/* double prev_frame_point=prev_frame.at<double>(30,30);
+	  std::cout<<"prev_frame_point"<<prev_frame_point<<std::endl;*/
+	  frame_double.copyTo(prev_frame);
+	  sprintf(buf_img,"%d.jpg",i);
+		  s_img=buf_img;
+/*------------------------标点连线-------------------*/
+		  for(int i=0;i<points[1].size();i++)
+		  {
+		  line(frame,points[0][i],points[1][i],cv::Scalar(255,255,255));
+		  circle(frame,points[1][i],3,cv::Scalar(255,255,255),-1);
+		  sprintf(buf_point,"%d.point",i);
+		  s_point=buf_point;
+		  putText(frame,s_point,points[1][i],CV_FONT_HERSHEY_COMPLEX, 0.5, cv::Scalar(255, 0, 0),1,8);
+		  }
+
+
+
+	  imshow(s_img,frame);//imshow可显示8，16无符号，1，3通道
 	  if(cv::waitKey(10)>=0)
 	  {
-	  return -1;}
+	  std::cout<<"exit"<<std::endl;
+	  }
+	   //cv::destroyWindow(s); 瞬间闪退
 	  cv::waitKey(1);
+	 
 	}
 	  return 0;
-	}
+}
