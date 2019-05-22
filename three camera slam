@@ -1,0 +1,603 @@
+// velocity_solution.cpp : 定义控制台应用程序的入口点。
+//
+#include "stdafx.h"
+#include <opencv2/opencv.hpp>
+#include "opencv2/imgproc/imgproc.hpp"
+#include "opencv2/highgui/highgui.hpp"
+#include <vector>
+#include <math.h>
+#include<fstream>
+#include<string>
+#include "velocity_solution.h"
+#include "camera_calibration.h"
+
+  std::vector<cv::Point2f> points_first[2];//头文件中普通变量声明，cpp定义
+  cv::Mat prev_frame_grey_first;
+ std::vector<cv::Point2f> points_second[2];
+  cv::Mat prev_frame_grey_second;
+  std::vector<cv::Point2f> points_third[2];
+  cv::Mat prev_frame_grey_third;
+
+  std::vector<double> inner_Matrix_parameter;
+  int fps=1;
+
+   double robot_position::P1_x=17.3;//静态变量只初始化一次，不会被还原,会降低运行速度
+ double robot_position:: P1_y=-10;
+  double robot_position::P2_x=-17.3;
+  double robot_position:: P2_y=-10;
+  double robot_position::P3_x=0;
+  double robot_position::P3_y=0;
+double robot_position:: b1=0;
+double robot_position:: b2=0;
+double robot_position:: b3=0;
+	double robot_position::P_x=0;
+	double robot_position::P_y=0;
+
+//int count_first=0;//检测帧数差
+//int count_second=0;
+	int count=-1;
+
+std::vector<cv::Point2f> sunpoint_first[2];
+std::vector<cv::Point2f> sunpoint_second[2];
+std::vector<cv::Point2f> sunpoint_third[2];
+std::vector<std::vector<cv::Point2f> >sun_first[2];//定义vector数组没有问题
+std::vector<std::vector<cv::Point2f> >sun_second[2];
+
+std::vector<std::vector<cv::Point2f> >sun_third[2];
+
+void image_feature::feature_match_first(cv::Mat &frame_grey_first)
+	{ 
+		//count_first++;
+	    //cvtColor(frame_first,frame_grey_first,CV_BGR2GRAY);
+	    //frame_first.convertTo(frame_double_first,CV_64F,1,0);//类型转化，转化为double类型,三通道,得到double类型的结果
+	    //std::cout<<"第"<<fps<<"帧"<<std::endl;
+		
+  	     if(prev_frame_grey_first.empty())
+	   {
+	       frame_grey_first.copyTo(prev_frame_grey_first);
+		}
+		 goodFeaturesToTrack(prev_frame_grey_first,features_first,500,0.01,10);/*-----------------------------特征点的跟踪---------------------------*/
+	   if(points_first[0].size()<=100)
+	   {
+		   points_first[0].insert(points_first[0].end(),features_first.begin(),features_first.end());
+	   }
+       calcOpticalFlowPyrLK(prev_frame_grey_first,frame_grey_first,points_first[0],points_first[1],status,err);
+
+       int k=0;
+	    if(!sunpoint_first[0].empty())//判断sunpoint是否为空
+	   {
+		   sunpoint_first[0].clear();
+	   }
+	   if(!sunpoint_first[1].empty())
+	   {
+	   sunpoint_first[1].clear();
+	   }
+
+       for(int i=0;i<points_first[1].size();i++)
+	   {
+		   if(status[i]&&(abs(points_first[0][i].x-points_first[1][i].x))+(abs(points_first[0][i].y-points_first[1][i].y))>1)
+		   {
+			   points_first[0][k]=points_first[0][i];
+			   sunpoint_first[0].push_back(points_first[0][k]);
+
+			   points_first[1][k]=points_first[1][i];	
+			   sunpoint_first[1].push_back(points_first[1][k++]);
+		   }
+	    }
+	   sun_first[0].push_back(sunpoint_first[0]);
+	   sun_first[1].push_back(sunpoint_first[1]);
+	   points_first[0].resize(k);
+	   points_first[1].resize(k);
+	   circle_line_first(frame_grey_first);
+	   
+	   frame_grey_first.copyTo(prev_frame_grey_first);//进行循环的条件
+	   swap(points_first[1],points_first[0]);//用此帧图像的点变为前一帧
+
+
+	  }
+
+void image_feature::feature_match_second(cv::Mat &frame_grey_second)
+	{
+	   //count_second++;
+	    
+	    if(prev_frame_grey_second.empty())
+	   {
+	       frame_grey_second.copyTo(prev_frame_grey_second);
+		}
+
+	   goodFeaturesToTrack(prev_frame_grey_second,features_second,500,0.01,10);//-----------------------------特征点的跟踪--------------
+	   if(points_second[0].size()<=100)
+	   {
+		   points_second[0].insert(points_second[0].end(),features_second.begin(),features_second.end());
+	   }
+       calcOpticalFlowPyrLK(prev_frame_grey_second,frame_grey_second,points_second[0],points_second[1],status,err);
+       int k=0;
+	   if(!sunpoint_second[0].empty())//判断sunpoint是否为空
+	   {
+		   sunpoint_second[0].clear();
+	   }
+	   if(!sunpoint_second[1].empty())
+	   {
+	   sunpoint_second[1].clear();
+	   }
+       for(int i=0;i<points_second[1].size();i++)
+	   {
+		   if(status[i]&&(abs(points_second[0][i].x-points_second[1][i].x))+(abs(points_second[0][i].y-points_second[1][i].y))>1)
+		   {
+			   points_second[0][k]=points_second[0][i];//sunpoint_second的定义出错了，sunpoint_second没有清空
+			    sunpoint_second[0].push_back(points_second[0][k]);
+			   points_second[1][k]=points_second[1][i];
+			      sunpoint_second[1].push_back(points_second[1][k++]);//k在最后时刻加
+		   }
+	    }
+	   sun_second[0].push_back(sunpoint_second[0]);
+	   sun_second[1].push_back(sunpoint_second[1]);
+
+	   points_second[0].resize(k);
+	   points_second[1].resize(k);
+
+	   circle_line_second( frame_grey_second);
+	   
+	   frame_grey_second.copyTo(prev_frame_grey_second);
+	   swap(points_second[1],points_second[0]);
+	   
+}
+
+
+
+void image_feature::feature_match_third(cv::Mat &frame_grey_third,robot_position& robot_p)
+	{
+	   
+	    if(prev_frame_grey_third.empty())
+	   {
+	       frame_grey_third.copyTo(prev_frame_grey_third);
+		}
+
+	   goodFeaturesToTrack(prev_frame_grey_third,features_third,500,0.01,10);//-----------------------------特征点的跟踪--------------
+	   if(points_third[0].size()<=100)
+	   {
+		   points_third[0].insert(points_third[0].end(),features_third.begin(),features_third.end());
+	   }
+       calcOpticalFlowPyrLK(prev_frame_grey_third,frame_grey_third,points_third[0],points_third[1],status,err);
+       int k=0;
+	      if(!sunpoint_third[0].empty())//判断sunpoint是否为空
+	   {
+		   sunpoint_third[0].clear();
+	   }
+	   if(!sunpoint_third[1].empty())
+	   {
+	   sunpoint_third[1].clear();
+	   }
+       for(int i=0;i<points_third[1].size();i++)
+	   {
+		   if(status[i]&&(abs(points_third[0][i].x-points_third[1][i].x))+(abs(points_third[0][i].y-points_third[1][i].y))>1)
+		   {
+			   points_third[0][k]=points_third[0][i];
+			    sunpoint_third[0].push_back(points_third[0][k]);
+			   points_third[1][k]=points_third[1][i];
+			     sunpoint_third[1].push_back(points_third[1][k++]);
+		   }
+	    }
+	      sun_third[0].push_back(sunpoint_third[0]);
+	   sun_third[1].push_back(sunpoint_third[1]);
+	   points_third[0].resize(k);
+	   points_third[1].resize(k);
+	     circle_line_third( frame_grey_third);
+		 robot_p.camera_position();
+	    frame_grey_third.copyTo(prev_frame_grey_third);
+	   swap(points_third[1],points_third[0]);
+	  
+		
+}
+
+
+
+
+void  enter_camera_calibration(  int &enter_fps)//-------------------------------进入相机标定函数-------------------------
+{     
+
+	  std::vector<std::vector<cv::Mat> > camera_inner_Matrix;
+     std::vector<cv::Mat>  camera_inner_Matrix_first;
+     std::vector<cv::Mat>  camera_inner_Matrix_second;
+      std::vector<cv::Mat>  camera_inner_Matrix_third;
+    if(enter_fps==1)
+	  {  
+		 camera_inner_Matrix= camera_calibration();
+	camera_inner_Matrix_first=camera_inner_Matrix[0];//在外面定义后，内部不能再重新定义，局部变量
+		 camera_inner_Matrix_second=camera_inner_Matrix[1];
+	 camera_inner_Matrix_third=camera_inner_Matrix[2];
+		/* for(int i=0;i<camera_inner_Matrix_first.size();i++)
+	    {
+	     std::cout<<camera_inner_Matrix_first[i]<<std::endl;
+	    }
+		  for(int i=0;i<camera_inner_Matrix_second.size();i++)
+	    {
+	     std::cout<<camera_inner_Matrix_second[i]<<std::endl;
+	    }
+		   for(int i=0;i<camera_inner_Matrix_third.size();i++)
+	    {
+	     std::cout<<camera_inner_Matrix_third[i]<<std::endl;
+	    }*/
+		 
+		 enter_fps++;
+      }
+	  const double dx=0.48,dy=0.48;
+	   const  double Zc=100;//以mm和s作为单位   Zc应该是测出来的，先假设地面是平整的
+		const double t=0.033;//帧数的测定存在误差，视频在55s处停止，计算当时对应帧数1655，得出准确的结果
+      double k1_first=(camera_inner_Matrix_first[1]).at<double>(0,0);//vecto和mat之间的关系
+	   double f_first=(camera_inner_Matrix_first[0]).at<double>(0,0)*dx;
+	  double u0_first=(camera_inner_Matrix_first[0]).at<double>(0,2);
+	 // std::cout<<u0_first<<std::endl;
+	  double v0_first=(camera_inner_Matrix_first[0]).at<double>(1,2);
+	    double k1_second=(camera_inner_Matrix_second[1]).at<double>(0,0);
+	   double f_second=(camera_inner_Matrix_second[0]).at<double>(0,0)*dx;
+	  double u0_second=(camera_inner_Matrix_second[0]).at<double>(0,2);
+	  double v0_second=(camera_inner_Matrix_second[0]).at<double>(1,2);
+	    double k1_third=(camera_inner_Matrix_third[1]).at<double>(0,0);
+	   double f_third=(camera_inner_Matrix_third[0]).at<double>(0,0)*dx;
+	  double u0_third=(camera_inner_Matrix_third[0]).at<double>(0,2);
+	  double v0_third=(camera_inner_Matrix_third[0]).at<double>(1,2);
+	  
+	inner_Matrix_parameter.push_back(k1_first);//0
+	 inner_Matrix_parameter.push_back(f_first);//1
+      inner_Matrix_parameter.push_back(u0_first);//2
+	inner_Matrix_parameter.push_back(v0_first);//3
+	 inner_Matrix_parameter.push_back(k1_second);//4
+	inner_Matrix_parameter.push_back(f_second);//5
+	  inner_Matrix_parameter.push_back(u0_second);//6
+	inner_Matrix_parameter.push_back(v0_second);//7
+	inner_Matrix_parameter.push_back(k1_third);//8
+	  inner_Matrix_parameter.push_back(f_third);//9
+	  inner_Matrix_parameter.push_back(u0_third);//10
+	  inner_Matrix_parameter.push_back(v0_third);//11
+	  inner_Matrix_parameter.push_back(Zc);//12
+	 inner_Matrix_parameter.push_back(dx);//13
+	 inner_Matrix_parameter.push_back(dy);//14
+	  inner_Matrix_parameter.push_back(t);//15
+}
+
+
+void camera_velocity::camera_velocity_solution_first(double& p1_x,double& p1_y,int& sum_1)//sum实现同步//------------求解相机速度---------------- //自己设计的算法，最小二乘法和二维，三维的特征点的匹配
+{   
+	
+	int fps_first=1;//按照帧输出
+	 cv::Mat outer_Matrix=cv::Mat::zeros(2,3,CV_64FC1);
+     double sum_x=0;
+     double sum_x2=0;
+     double sum_y=0;
+     double sum_y2=0;
+     double sum_xy=0;
+     double sum_ux=0;
+     double sum_uy=0;
+     double sum_vx=0;
+     double sum_vy=0;
+     double sum_u=0;
+     double sum_v=0;
+     int n=sun_first[0][sum_1].size();
+     //double k1=-0.112;//让它调用camera函数，测试所用的值
+     //double k2=0.296;
+     //double Zc=100;//假设Zc=100
+     //double f=730;
+	 for(int world_i=0;world_i<sun_first[0][sum_1].size();world_i++)//
+	 {  
+		 cv:: Point3f true_point_first;
+	   true_point_first.x=inner_Matrix_parameter[12]*(sun_first[0][sum_1][world_i].x-inner_Matrix_parameter[2])*
+		   inner_Matrix_parameter[13]/inner_Matrix_parameter[1];
+		true_point_first.y=inner_Matrix_parameter[12]*(sun_first[0][sum_1][world_i].y-inner_Matrix_parameter[3])*
+			inner_Matrix_parameter[14]/inner_Matrix_parameter[1];
+		true_point_first.z=inner_Matrix_parameter[12];
+		world_points_first.push_back(true_point_first);
+     }
+	 int r=0;//r代表不越界的点的个数
+     for(int i=0;i<n;i++)//越界问题解决
+     {   
+         if( (1<sun_first[1][sum_1][i].x)  && (sun_first[1][sum_1][i].x<628) &&(1<sun_first[1][sum_1][i].y)  &&  (sun_first[1][sum_1][i].y<462)    )//保证u数组不越界,1<x<10相当于(1<x) <10
+         {   
+			 r++;
+			 sum_x+=world_points_first[i].x;
+	         sum_x2+=world_points_first[i].x*world_points_first[i].x;
+	         sum_y+=world_points_first[i].y;
+ 	         sum_y2+=world_points_first[i].y*world_points_first[i].y;
+ 	         sum_xy+=world_points_first[i].x*world_points_first[i].y;
+	         sum_ux+=(sun_first[1][sum_1][i].x-inner_Matrix_parameter[2])*world_points_first[i].x;//由double类型被迫转换为int类型，精度损失,此处的u不是指向速度的
+	         sum_uy+=(sun_first[1][sum_1][i].x-inner_Matrix_parameter[2])*world_points_first[i].y;
+ 	         sum_vx+=(sun_first[1][sum_1][i].y-inner_Matrix_parameter[3])*world_points_first[i].x;
+	         sum_vy+=(sun_first[1][sum_1][i].y-inner_Matrix_parameter[3])*world_points_first[i].y;
+	         sum_u+=(sun_first[1][sum_1][i].x-inner_Matrix_parameter[2]);
+	         sum_v+=(sun_first[1][sum_1][i].y-inner_Matrix_parameter[3]);
+		 }
+		 
+	 }
+	 double det_A=(sum_x2*(sum_y2*n-sum_y*sum_y))-(sum_xy*(sum_xy*n-sum_x*sum_y))+(sum_x*(sum_xy*sum_y-sum_y2*sum_x));
+	 //std::cout<<sum_x<<" "<<sum_x2<<" "<<sum_y<<" "<<sum_y2<<" "<<sum_xy<<" "<<sum_ux<<" "<<sum_uy<<" "<<sum_vx<<" "<<sum_vy<<" "<<sum_u<<" "<<sum_v<<" "<<n<<std::endl;
+     outer_Matrix.at<double>(0,0)=(sum_ux*(sum_y2*n-sum_y*sum_y)+sum_uy*(-(sum_xy*n-sum_x*sum_y))+sum_u*(sum_xy*sum_y-sum_y2*sum_x))/det_A;
+     //outer_Matrix.at<double>(0,1)=sum_ux*(-(sum_xy*n-sum_x*sum_y))+sum_uy*(sum_x2*n-sum_x*sum_y)+sum_u*(-(sum_x2*sum_y-sum_xy*sum_x));
+     outer_Matrix.at<double>(0,2)=(sum_ux*(sum_xy*sum_y-sum_y2*sum_x)+sum_uy*(-(sum_x2*sum_y-sum_xy*sum_x))+sum_u*(sum_x2*sum_y2-sum_xy*sum_xy))/det_A;
+     //outer_Matrix.at<double>(1,0)=sum_vx*(sum_y2*n-sum_y*sum_y)+sum_vy*(-(sum_xy*n-sum_x*sum_y))+sum_v*(sum_xy*sum_y-sum_y2*sum_x);
+     //outer_Matrix.at<double>(1,1)=sum_vx*(-(sum_xy*n-sum_x*sum_y))+sum_vy*(sum_x2*n-sum_x*sum_y)+sum_v*(-(sum_x2*sum_y-sum_xy*sum_x));
+     outer_Matrix.at<double>(1,2)=(sum_vx*(sum_xy*sum_y-sum_y2*sum_x)+sum_vy*(-(sum_x2*sum_y-sum_xy*sum_x))+sum_v*(sum_x2*sum_y2-sum_xy*sum_xy))/det_A;
+	// std::cout<<outer_Matrix.at<double>(0,0)<<std::endl;
+     tvecs_x_first.push_back(-outer_Matrix.at<double>(0,2)*inner_Matrix_parameter[12]*inner_Matrix_parameter[13]/inner_Matrix_parameter[1]);//对应的是dx，不是k1;
+     tvecs_y_first.push_back(-outer_Matrix.at<double>(1,2)*inner_Matrix_parameter[12]*inner_Matrix_parameter[14]/inner_Matrix_parameter[1]);
+     rvecs_first.push_back(acos(outer_Matrix.at<double>(0,0)*inner_Matrix_parameter[12]*inner_Matrix_parameter[13]/inner_Matrix_parameter[1]));
+	 //std::cout<<outer_Matrix.at<double>(0,0)<<std::endl;
+	 //std::cout<<outer_Matrix.at<double>(0,0)*Zc*dx/f<<std::endl;
+     //tevcs_line.push_back((tevcs_a,tevcs_b));如何把点存到vector中
+     //revcs_angle.push_back(revcs_t);
+	 //std::cout<<r<<std::endl;
+	 //std::cout<<"C"<<std::endl;
+    std::cout<<"camera_one_Vx"<<tvecs_x_first[fps_first-1]/inner_Matrix_parameter[15]<<"mm/s"<<std::endl;
+     std::cout<<"camera_one_Vy"<<tvecs_y_first[fps_first-1]/inner_Matrix_parameter[15]<<"mm/s"<<std::endl;
+	 p1_x+=tvecs_x_first[fps_first-1];
+	 p1_y+=tvecs_y_first[fps_first-1];
+	  fps_first++;//按帧输出速度
+     //std::cout<<"相机的移动角度"<<rvecs_t[fps-1]<<"dre"<<std::endl; 相机的移动角度应该cos值应该在1左右？？？？？？？？？？？
+}
+
+
+
+void camera_velocity::camera_velocity_solution_second(double& p2_x,double& p2_y,int& sum_2)
+{    
+	
+	 int fps_second=1;//输出帧数
+     cv::Mat outer_Matrix=cv::Mat::zeros(2,3,CV_64FC1);
+     double sum_x=0;
+     double sum_x2=0;
+     double sum_y=0;
+     double sum_y2=0;
+     double sum_xy=0;
+     double sum_ux=0;
+     double sum_uy=0;
+     double sum_vx=0;
+     double sum_vy=0;
+     double sum_u=0;
+     double sum_v=0;
+     int n=sun_second[0][sum_2].size();
+	 for(int world_i=0;world_i<sun_second[0][sum_2].size();world_i++)//
+	 {  
+		 cv:: Point3f true_point_second;
+	   true_point_second.x=inner_Matrix_parameter[12]*(sun_second[0][sum_2][world_i].x-inner_Matrix_parameter[6])
+		   *inner_Matrix_parameter[13]/inner_Matrix_parameter[5];
+		true_point_second.y=inner_Matrix_parameter[12]*(sun_second[0][sum_2][world_i].y-inner_Matrix_parameter[7])
+			*inner_Matrix_parameter[14]/inner_Matrix_parameter[5];
+		true_point_second.z=inner_Matrix_parameter[12];
+		world_points_second.push_back(true_point_second);
+     }
+	 int r=0;//r代表不越界的点的个数
+     for(int i=0;i<n;i++)//越界问题解决
+     {   
+
+		 if( (1<sun_second[1][sum_2][i].x)  && (sun_second[1][sum_2][i].x<628) &&(1<sun_second[1][sum_2][i].y)  &&  (sun_second[1][sum_2][i].y<462)    )//保证u数组不越界,1<x<10相当于(1<x) <10
+         {   
+			 r++;
+			 sum_x+=world_points_second[i].x;
+	         sum_x2+=world_points_second[i].x*world_points_second[i].x;
+	         sum_y+=world_points_second[i].y;
+ 	         sum_y2+=world_points_second[i].y*world_points_second[i].y;
+ 	         sum_xy+=world_points_second[i].x*world_points_second[i].y;
+	         sum_ux+=(sun_second[1][sum_2][i].x-inner_Matrix_parameter[6])*world_points_second[i].x;//由double类型被迫转换为int类型，精度损失,此处的u不是指向速度的
+	         sum_uy+=(sun_second[1][sum_2][i].x-inner_Matrix_parameter[7])*world_points_second[i].y;
+ 	         sum_vx+=(sun_second[1][sum_2][i].y-inner_Matrix_parameter[6])*world_points_second[i].x;
+	         sum_vy+=(sun_second[1][sum_2][i].y-inner_Matrix_parameter[7])*world_points_second[i].y;
+	         sum_u+=(sun_second[1][sum_2][i].x-inner_Matrix_parameter[6]);
+	         sum_v+=(sun_second[1][sum_2][i].y-inner_Matrix_parameter[7]);
+		 }
+	 }
+	 double det_A=(sum_x2*(sum_y2*n-sum_y*sum_y))-(sum_xy*(sum_xy*n-sum_x*sum_y))+(sum_x*(sum_xy*sum_y-sum_y2*sum_x));
+	 outer_Matrix.at<double>(0,0)=(sum_ux*(sum_y2*n-sum_y*sum_y)+sum_uy*(-(sum_xy*n-sum_x*sum_y))+sum_u*(sum_xy*sum_y-sum_y2*sum_x))/det_A;
+     outer_Matrix.at<double>(0,2)=(sum_ux*(sum_xy*sum_y-sum_y2*sum_x)+sum_uy*(-(sum_x2*sum_y-sum_xy*sum_x))+sum_u*(sum_x2*sum_y2-sum_xy*sum_xy))/det_A;
+     outer_Matrix.at<double>(1,2)=(sum_vx*(sum_xy*sum_y-sum_y2*sum_x)+sum_vy*(-(sum_x2*sum_y-sum_xy*sum_x))+sum_v*(sum_x2*sum_y2-sum_xy*sum_xy))/det_A;
+     tvecs_x_second.push_back(-outer_Matrix.at<double>(0,2)*inner_Matrix_parameter[12]*inner_Matrix_parameter[13]/inner_Matrix_parameter[5]);
+     tvecs_y_second.push_back(-outer_Matrix.at<double>(1,2)*inner_Matrix_parameter[12]*inner_Matrix_parameter[14]/inner_Matrix_parameter[5]);
+     rvecs_second.push_back(acos(outer_Matrix.at<double>(0,0)*inner_Matrix_parameter[12]*inner_Matrix_parameter[13]/inner_Matrix_parameter[5]));
+	 //std::cout<<"camera_two_Vx"<<tvecs_x_second[fps_second-1]/inner_Matrix_parameter[15]<<"mm/s"<<std::endl;
+    // std::cout<<"camera_two_Vy"<<tvecs_y_second[fps_second-1]/inner_Matrix_parameter[15]<<"mm/s"<<std::endl;
+	  p2_x+=tvecs_x_second[fps_second-1];
+	  p2_y+=tvecs_y_second[fps_second-1];
+	  fps_second++;
+}
+
+
+void camera_velocity::camera_velocity_solution_third(double&p3_x,double&p3_y,int&sum_3)
+{    
+	int fps_third=1;
+	
+     cv::Mat outer_Matrix=cv::Mat::zeros(2,3,CV_64FC1);
+     double sum_x=0;
+     double sum_x2=0;
+     double sum_y=0;
+     double sum_y2=0;
+     double sum_xy=0;
+     double sum_ux=0;
+     double sum_uy=0;
+     double sum_vx=0;
+     double sum_vy=0;
+     double sum_u=0;
+     double sum_v=0;
+     int n=sun_third[0][sum_3].size();
+	 for(int world_i=0;world_i<sun_third[0][sum_3].size();world_i++)//
+	 {  
+		 cv:: Point3f true_point_third;
+	   true_point_third.x=inner_Matrix_parameter[12]*(sun_third[0][sum_3][world_i].x-inner_Matrix_parameter[10])*
+		   inner_Matrix_parameter[13]/inner_Matrix_parameter[9];
+		true_point_third.y=inner_Matrix_parameter[12]*(sun_third[0][sum_3][world_i].y-inner_Matrix_parameter[11])*
+			inner_Matrix_parameter[14]/inner_Matrix_parameter[9];
+		true_point_third.z=inner_Matrix_parameter[12];
+		world_points_third.push_back(true_point_third);
+     }
+	 int r=0;//r代表不越界的点的个数
+     for(int i=0;i<n;i++)//越界问题解决
+     {   
+         if( (1<sun_third[1][sum_3][i].x)  && (sun_third[1][sum_3][i].x<628) &&(1<sun_third[1][sum_3][i].y)  &&  (sun_third[1][sum_3][i].y<462)    )//保证u数组不越界,1<x<10相当于(1<x) <10
+         {   
+			 r++;
+			 sum_x+=world_points_third[i].x;
+	         sum_x2+=world_points_third[i].x*world_points_third[i].x;
+	         sum_y+=world_points_third[i].y;
+ 	         sum_y2+=world_points_third[i].y*world_points_third[i].y;
+ 	         sum_xy+=world_points_third[i].x*world_points_third[i].y;
+	         sum_ux+=(sun_third[1][sum_3][i].x-inner_Matrix_parameter[10])*world_points_third[i].x;//由double类型被迫转换为int类型，精度损失,此处的u不是指向速度的
+	         sum_uy+=(sun_third[1][sum_3][i].x-inner_Matrix_parameter[10])*world_points_third[i].y;
+ 	         sum_vx+=(sun_third[1][sum_3][i].y-inner_Matrix_parameter[11])*world_points_third[i].x;
+	         sum_vy+=((sun_third[1][sum_3][i].y-inner_Matrix_parameter[11]))*world_points_third[i].y;
+	         sum_u+=(sun_third[1][sum_3][i].x-inner_Matrix_parameter[10]);
+	         sum_v+=(sun_third[1][sum_3][i].y-inner_Matrix_parameter[11]);
+		 }
+	 }
+	 double det_A=(sum_x2*(sum_y2*n-sum_y*sum_y))-(sum_xy*(sum_xy*n-sum_x*sum_y))+(sum_x*(sum_xy*sum_y-sum_y2*sum_x));
+	 outer_Matrix.at<double>(0,0)=(sum_ux*(sum_y2*n-sum_y*sum_y)+sum_uy*(-(sum_xy*n-sum_x*sum_y))+sum_u*(sum_xy*sum_y-sum_y2*sum_x))/det_A;
+     outer_Matrix.at<double>(0,2)=(sum_ux*(sum_xy*sum_y-sum_y2*sum_x)+sum_uy*(-(sum_x2*sum_y-sum_xy*sum_x))+sum_u*(sum_x2*sum_y2-sum_xy*sum_xy))/det_A;
+     outer_Matrix.at<double>(1,2)=(sum_vx*(sum_xy*sum_y-sum_y2*sum_x)+sum_vy*(-(sum_x2*sum_y-sum_xy*sum_x))+sum_v*(sum_x2*sum_y2-sum_xy*sum_xy))/det_A;
+     tvecs_x_third.push_back(-outer_Matrix.at<double>(0,2)*inner_Matrix_parameter[12]*inner_Matrix_parameter[13]/inner_Matrix_parameter[9]);
+     tvecs_y_third.push_back(-outer_Matrix.at<double>(1,2)*inner_Matrix_parameter[12]*inner_Matrix_parameter[14]/inner_Matrix_parameter[9]);
+     rvecs_third.push_back(acos(outer_Matrix.at<double>(0,0)*inner_Matrix_parameter[12]*inner_Matrix_parameter[13]/inner_Matrix_parameter[9]));
+	// std::cout<<"相机的横向移动速度"<<tvecs_x_third[fps_third-1]/inner_Matrix_parameter[15]<<"mm/s"<<std::endl;
+    // std::cout<<"相机的纵向移动速度"<<tvecs_y_third[fps_third-1]/inner_Matrix_parameter[15]<<"mm/s"<<std::endl;
+	 p3_x+=tvecs_x_third[fps_third-1];
+	 p3_y+=tvecs_y_third[fps_third-1];
+	 fps_third++;
+}
+
+
+
+void robot_position::square_ratio( double &B1, double &B2, double &B3)
+{
+	const double l1=sqrt((P_x_initial-P1_x_initial)*(P_x_initial-P1_x_initial)+(P_y_initial-P1_y_initial)*(P_y_initial-P1_y_initial));
+	const double l2=sqrt((P_x_initial-P2_x_initial)*(P_x_initial-P2_x_initial)+(P_y_initial-P2_y_initial)*(P_y_initial-P2_y_initial));
+	const double l3=sqrt((P_x_initial-P3_x_initial)*(P_x_initial-P3_x_initial)+(P_y_initial-P3_y_initial)*(P_y_initial-P3_y_initial));
+	const double a1=sqrt((P2_x_initial-P3_x_initial)*(P2_x_initial-P3_x_initial)+(P2_y_initial-P3_y_initial)*(P2_y_initial-P3_y_initial));
+	const double a2=sqrt((P1_x_initial-P3_x_initial)*(P1_x_initial-P3_x_initial)+(P1_y_initial-P3_y_initial)*(P1_y_initial-P3_y_initial));
+	const double a3=sqrt((P2_x_initial-P1_x_initial)*(P2_x_initial-P1_x_initial)+(P2_y_initial-P1_y_initial)*(P2_y_initial-P1_y_initial));
+	const double p1=(a1+l2+l3)/2;
+	const double p2=(a2+l1+l3)/2;
+	const double p3=(a3+l1+l2)/2;
+	const double s1=sqrt(p1*(p1-a1)*(p1-l2)*(p1-l3));
+	const double s2=sqrt(p2*(p2-a2)*(p2-l1)*(p2-l3));
+	const double s3=sqrt(p3*(p3-a3)*(p3-l1)*(p3-l2));
+    B1=s1/(s1+s2+s3);
+     B2=s2/(s1+s2+s3);
+     B3=s3/(s1+s2+s3);
+}
+
+void robot_position::camera_position()//利用非成员函数调用成员函数的方式不麻烦，换个思路，要利用main才好，而主函数
+{   
+	count++;
+	//std::cout<<count_first<<" "<<count_second<<std::endl;
+	if(fps==1)
+	{
+		fps++;
+	square_ratio(b1,b2,b3);
+	return ;
+	}
+	if( (sun_first[0][count].empty()) || (sun_second[0][count].empty()) || (sun_third[0][count].empty()) )//由于第一帧的结果无参考意义，所以从第二帧开始
+	{
+		fps++;
+		std::cout<<"no feature"<<std::endl;
+	    return ;
+	}
+	else if( (sun_first[0][count].size()<10) || (sun_second[0][count].size()<10) || (sun_third[0][count].size()<10))//点数至少2个点，才能计算，过少误差大，相当与没有移动
+	{
+		fps++;
+		std::cout<<"less feature"<<std::endl;
+	    return ;
+	}
+	pose.camera_velocity_solution_first(P1_x,P1_y,count);//一个类调用另一个类的成
+	//员函数，继承或b里放a对象;，调用分为主函数调用其他函数，和函数之间的相互调用
+     pose.camera_velocity_solution_second(P2_x,P2_y,count);//要保证接受的点是同一时刻两帧得到的特征点，时序性？计数器,解决points_first和points_second对应不上
+	 pose.camera_velocity_solution_third(P3_x,P3_y,count);
+	//std::cout<<b1<<b2<<b3<<std::endl;
+	 P_x=b1*P1_x+b2*P2_x+b3*P3_x;
+	 P_y=b1*P1_y+b2*P2_y+b3*P3_y;
+	 P_theta=atan(P_y/P_x)*180/pi;
+	 std::cout<<"robot_position_x"<<P_x<<std::endl;
+	std::cout<<"robot_position_y"<<P_y<<std::endl;
+	 std::cout<<"robot_position_r"<<P_theta<<std::endl;
+	fps++;
+}
+/*---------------------------------------------------pnp解算相机的位姿---------------------------------------------------*/
+	/* solvePnP(world_points,points[0],camera_inner_Matrix[0],camera_inner_Matrix[1],rvec,tvec,false, CV_ITERATIVE);
+	 double rm[9];//旋转向量变为旋转矩阵
+     cv::Mat rotM(3, 3, CV_64FC1, rm);
+     Rodrigues(rvec, rotM);
+	 const double PI=3.141592653;
+	 double thetaz=atan2(rotM.at<double>(0,1),rotM.at<double>(0,0))/PI*180;//根据旋转矩阵求旋转欧拉角，atan(y,x)得tan
+	 double thetay=atan2(-1*rotM.at<double>(0,2),sqrt(rotM.at<double>(0,1)*rotM.at<double>(0,0)+rotM.at<double>(0,1)*rotM.at<double>(0,1)))/PI*180;
+	 double thetax=atan2(rotM.at<double>(1,2),rotM.at<double>(2,2))/PI*180;
+	 std::cout<<tvec<<" "<<thetaz<<" "<<thetay<<" "<<thetax<<std::endl;
+//------------------------标点连线------------------------------------------------------------------------------------------------*/
+
+
+
+void image_feature::circle_line_first(cv::Mat & frame_grey_first_circle)
+{   
+	cvtColor(frame_grey_first_circle,frame_first,CV_GRAY2RGB);
+	for(int i=0;i<points_first[1].size();i++)
+      {
+			line(frame_first,points_first[0][i],points_first[1][i],cv::Scalar(255,255,255));
+		    circle(frame_first,points_first[1][i],2,cv::Scalar(255,255,255),-1);
+			circle(frame_first,points_first[0][i],2,cv::Scalar(255,255,0),-1);
+		    sprintf(buf_point,"%d",i);
+		    s_point=buf_point;
+		    //sprintf(buf_img,"%d.jpg",i);
+	        //s_img=buf_img;
+		    putText(frame_first,s_point,points_first[1][i],CV_FONT_HERSHEY_COMPLEX, 0.2, cv::Scalar(255, 0, 0),1,8);
+			//putText(frame_first,s_img,cv::Point(30,30),CV_FONT_HERSHEY_COMPLEX, 10, cv::Scalar(255, 0, 0),1,8);
+	  }
+      
+	cv::Mat dst_first;
+	cv::resize(frame_first,dst_first,cv::Size(frame_first.cols/2,frame_first.rows/2),0,0,CV_INTER_LINEAR);
+	  imshow("sun_point_img_first",dst_first);//imshow可显示8，16无符号，1，3通道
+	  if(cv::waitKey(10)>=0)
+	  {
+		  std::cout<<"exit"<<std::endl;
+	  }
+	  //cv::destroyWindow(s); 瞬间闪退
+      // frame_double.copyTo(prev_frame);
+}
+
+
+void image_feature::circle_line_second(cv::Mat & frame_grey_second_circle)
+
+{   
+	cvtColor(frame_grey_second_circle,frame_second,CV_GRAY2RGB);
+	for(int i=0;i<points_second[1].size();i++)
+      {
+			line(frame_second,points_second[0][i],points_second[1][i],cv::Scalar(255,255,255));
+		    circle(frame_second,points_second[1][i],2,cv::Scalar(255,255,255),-1);
+			circle(frame_second,points_second[0][i],2,cv::Scalar(255,255,0),-1);
+		    sprintf(buf_point,"%d",i);
+		    s_point=buf_point;
+			// sprintf(buf_img,"%d.jpg",i);
+	        //s_img=buf_img;
+		    putText(frame_second,s_point,points_second[1][i],CV_FONT_HERSHEY_COMPLEX, 0.2, cv::Scalar(255, 0, 0),1,8);
+			//putText(frame_second,s_img,cv::Point(30,30),CV_FONT_HERSHEY_COMPLEX, 10, cv::Scalar(255, 0, 0),1,8);
+	  }
+		cv::Mat dst_second;
+	cv::resize(frame_second,dst_second,cv::Size(frame_second.cols/2,frame_second.rows/2),0,0,CV_INTER_LINEAR);
+	  imshow("sun_point_img_second",dst_second);//imshow可显示8，16无符号，1，3通道
+	  if(cv::waitKey(10)>=0)
+	  {
+		  std::cout<<"exit"<<std::endl;
+	  }
+}
+
+void image_feature::circle_line_third(cv::Mat &frame_grey_third_circle)
+{   
+	cvtColor(frame_grey_third_circle,frame_third,CV_GRAY2RGB);
+	for(int i=0;i<points_third[1].size();i++)
+      {
+			line(frame_third,points_third[0][i],points_third[1][i],cv::Scalar(255,255,255));
+		    circle(frame_third,points_third[1][i],2,cv::Scalar(255,255,255),-1);
+			circle(frame_third,points_third[0][i],2,cv::Scalar(255,255,0),-1);
+		    sprintf(buf_point,"%d",i);
+		    s_point=buf_point;
+		    putText(frame_third,s_point,points_third[1][i],CV_FONT_HERSHEY_COMPLEX, 0.2, cv::Scalar(255, 0, 0),1,8);
+	  }
+	    cv::Mat dst_third;  
+	cv::resize(frame_third,dst_third,cv::Size(frame_third.cols/2,frame_third.rows/2),0,0,CV_INTER_LINEAR);
+	  imshow("sun_point_img_third",dst_third);//imshow可显示8，16无符号，1，3通道
+	  if(cv::waitKey(10)>=0)
+	  {
+		  std::cout<<"exit"<<std::endl;
+	  }
+}
